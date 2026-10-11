@@ -1,0 +1,32 @@
+# Default StorageClass: gp3, encrypted, WaitForFirstConsumer.
+#
+# EKS no longer marks any StorageClass as default on new clusters, so a
+# PersistentVolumeClaim without a class (Prometheus, Grafana, later Harbor)
+# would stay Pending forever. Same class as the original platform.
+#
+# WaitForFirstConsumer: the volume is created in the zone of the node the pod
+# is scheduled to -- not in an arbitrary zone first, which is how a pod ends
+# up unable to reach its own disk.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: storage
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-40"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/nopega/vpn-data-platform-apps.git
+    targetRevision: main
+    path: workloads/storage
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

@@ -1,0 +1,99 @@
+# kube-prometheus-stack 88.3.0 -- Prometheus, Grafana, Alertmanager, exporters.
+#
+# Kept in next/ until VPN_DATA_PLATFORM bootstrap/monitoring.sh has created
+# the Grafana admin Secret, and the old 'grafana' and 'prometheus' records are
+# gone from Cloudflare. Then: mv next/monitoring.yaml apps/ and push.
+#
+# Two sources instead of a vendored chart: the chart is 7 MB (CRDs and four
+# sub-charts) and is published upstream, so it comes from the
+# prometheus-community repository at a pinned version; the original
+# platform's values file (220 KB, every edit marked "data-platform") comes
+# from this repo. valuesObject then overrides only what differs here.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring
+  namespace: argocd
+  annotations:
+    # After storage (-40) and Karpenter (-30); before Trino (10), whose
+    # ServiceMonitor needs this chart's CRDs.
+    argocd.argoproj.io/sync-wave: "-10"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: 88.3.0
+      helm:
+        # Same release name as the original, so Service names match its docs
+        # (kube-prometheus-stack-grafana, kube-prometheus-stack-prometheus).
+        releaseName: kube-prometheus-stack
+        valueFiles:
+          - $values/values/kube-prometheus-stack.yaml
+        valuesObject:
+          grafana:
+            serviceAccount:
+              annotations:
+                # The original's IRSA role for a CloudWatch datasource. Not
+                # built here (yet); null removes the key from the values file.
+                eks.amazonaws.com/role-arn: null
+            additionalDataSources: []
+            ingress:
+              enabled: true
+              ingressClassName: alb
+              annotations:
+                alb.ingress.kubernetes.io/scheme: internal
+                alb.ingress.kubernetes.io/target-type: ip
+                alb.ingress.kubernetes.io/group.name: vpn-data-platform-internal
+                alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+                alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-2021-06
+                alb.ingress.kubernetes.io/inbound-cidrs: 10.42.0.0/16
+                alb.ingress.kubernetes.io/healthcheck-path: /api/health
+              hosts:
+                - grafana.nopega.net
+              path: /
+              tls:
+                - secretName: grafana-tls-unused
+                  hosts:
+                    - grafana.nopega.net
+          prometheus:
+            ingress:
+              enabled: true
+              ingressClassName: alb
+              annotations:
+                alb.ingress.kubernetes.io/scheme: internal
+                alb.ingress.kubernetes.io/target-type: ip
+                alb.ingress.kubernetes.io/group.name: vpn-data-platform-internal
+                alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+                alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-2021-06
+                alb.ingress.kubernetes.io/inbound-cidrs: 10.42.0.0/16
+                alb.ingress.kubernetes.io/healthcheck-path: /-/healthy
+              # Prometheus has no login. In the original it sat behind a
+              # source-IP allowlist; here it is reachable only on Tailscale.
+              hosts:
+                - prometheus.nopega.net
+              paths:
+                - /
+              pathType: Prefix
+              tls:
+                - secretName: prometheus-tls-unused
+                  hosts:
+                    - prometheus.nopega.net
+    - repoURL: https://github.com/nopega/vpn-data-platform-apps.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # The chart's CRDs are larger than the 256 KB annotation client-side
+      # apply stores on each object; server-side apply does not store it.
+      - ServerSideApply=true
