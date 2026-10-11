@@ -34,6 +34,19 @@ spec:
         valueFiles:
           - $values/values/kube-prometheus-stack.yaml
         valuesObject:
+          # The operator's admission webhook (validates PrometheusRule syntax)
+          # gets its certificate from two Helm hook Jobs. Under Argo CD those
+          # become PreSync/PostSync hooks with a 60-second TTL: the PostSync
+          # patch never runs while anything is unhealthy, the webhook keeps a
+          # certificate the API server rejects ("tls: bad certificate"), and
+          # the next sync waits forever on a Job Kubernetes already deleted.
+          # Off: no hooks, no certificates. A malformed rule is then logged
+          # and skipped by the operator instead of refused at apply time.
+          prometheusOperator:
+            admissionWebhooks:
+              enabled: false
+            tls:
+              enabled: false
           grafana:
             serviceAccount:
               annotations:
