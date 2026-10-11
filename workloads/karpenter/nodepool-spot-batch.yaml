@@ -1,0 +1,55 @@
+# Spot capacity for Spark executors -- the job the managed ng-spot group was
+# meant to do, but could not while nothing scaled it up from zero.
+#
+# Same label and taint as ng-spot, so Spark executor settings carry over:
+#   nodeSelector: workload=batch
+#   toleration:   spot=true:NoSchedule
+# Nothing without that toleration ever lands here; a Spark DRIVER must not
+# (a reclaimed driver loses the whole job).
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: spot-batch
+spec:
+  template:
+    metadata:
+      labels:
+        workload: batch
+        lifecycle: spot
+    spec:
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: default
+      taints:
+        - key: spot
+          value: "true"
+          effect: NoSchedule
+      requirements:
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["spot"]
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        # Wide choice = more Spot pools to draw from = fewer interruptions.
+        - key: karpenter.k8s.aws/instance-category
+          operator: In
+          values: ["c", "m", "r"]
+        - key: karpenter.k8s.aws/instance-generation
+          operator: Gt
+          values: ["4"]
+        - key: karpenter.k8s.aws/instance-cpu
+          operator: In
+          values: ["2", "4", "8", "16"]
+      expireAfter: 168h
+
+  limits:
+    cpu: "32"
+    memory: 128Gi
+
+  disruption:
+    # Batch nodes exist for one job. Once empty for a minute, they go.
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 1m

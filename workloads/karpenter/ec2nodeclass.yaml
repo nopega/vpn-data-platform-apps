@@ -1,0 +1,43 @@
+# HOW Karpenter builds a node: image, network, role, disk. The NodePools
+# decide WHEN and WHAT SIZE; both of them use this class.
+---
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: default
+spec:
+  # Same IAM role as the managed node group (VPN_DATA_PLATFORM terraform/03),
+  # so the nodes already have an EKS access entry and the CNI/ECR policies.
+  role: vpn-data-platform-node
+
+  # Amazon Linux 2023, the EKS-optimised image for the cluster's version.
+  # @latest means a new AMI release makes existing nodes "drifted" and
+  # Karpenter replaces them -- one at a time, respecting disruption budgets.
+  # Pin to a dated alias (al2023@vYYYYMMDD) to control when that happens.
+  amiSelectorTerms:
+    - alias: al2023@latest
+
+  # Private subnets and the cluster security group, found by the tag that
+  # terraform/07 put on them.
+  subnetSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: vpn-data-platform
+  securityGroupSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: vpn-data-platform
+
+  blockDeviceMappings:
+    - deviceName: /dev/xvda
+      ebs:
+        volumeSize: 50Gi
+        volumeType: gp3
+        encrypted: true
+        deleteOnTermination: true
+
+  metadataOptions:
+    httpTokens: required          # IMDSv2 only
+    httpPutResponseHopLimit: 1    # pods cannot reach node credentials; they use Pod Identity
+
+  tags:
+    Project: vpn-data-platform
+    ManagedBy: karpenter

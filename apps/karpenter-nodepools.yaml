@@ -1,0 +1,29 @@
+# Karpenter NodePools + EC2NodeClass (workloads/karpenter).
+#
+# Kept in next/ until VPN_DATA_PLATFORM terraform/07_karpenter is applied:
+# that installs Karpenter and its CRDs. Before then these kinds do not exist
+# and the sync fails. Then: mv next/karpenter-nodepools.yaml apps/ and push.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: karpenter-nodepools
+  namespace: argocd
+  annotations:
+    # Before everything else: capacity first.
+    argocd.argoproj.io/sync-wave: "-30"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/nopega/vpn-data-platform-apps.git
+    targetRevision: main
+    path: workloads/karpenter
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
