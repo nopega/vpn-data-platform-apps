@@ -1,0 +1,40 @@
+# harbor.nopega.net on the shared internal ALB.
+#
+# One backend: the chart's nginx (Service "harbor"), which routes /api/,
+# /service/, /v2/, /c/ to core and everything else to the portal -- so the
+# ALB needs one target group and one health check.
+#
+# Reached by people over Tailscale and by the nodes themselves when they pull
+# images: nodes are inside 10.42.0.0/16, so they pass inbound-cidrs with no
+# extra rule (the original had to allow its NAT gateway's public address).
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: harbor
+  namespace: harbor
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internal
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/group.name: vpn-data-platform-internal
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-2021-06
+    alb.ingress.kubernetes.io/inbound-cidrs: 10.42.0.0/16
+    alb.ingress.kubernetes.io/healthcheck-path: /api/v2.0/ping
+spec:
+  ingressClassName: alb
+  tls:
+    - hosts:
+        - harbor.nopega.net
+      secretName: harbor-tls-unused
+  rules:
+    - host: harbor.nopega.net
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: harbor
+                port:
+                  number: 80

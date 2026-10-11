@@ -1,0 +1,104 @@
+# Harbor 2.15.1 (chart 1.19.1) -- the platform's own container registry.
+#
+# Kept in next/ until VPN_DATA_PLATFORM terraform/08_registry is applied and
+# bootstrap/harbor.sh has run, and the old 'harbor' record is gone from
+# Cloudflare. Then: mv next/harbor.yaml apps/ and push.
+#
+# Chart and values.yaml are the original platform's, vendored unchanged in
+# charts/harbor (every deviation from upstream is marked "data-platform)"
+# there). valuesObject below overrides only what differs here:
+#
+#   - every secret the chart would otherwise GENERATE while rendering points
+#     at a Secret made by bootstrap/harbor.sh. Under Argo CD the chart's
+#     `lookup` sees nothing, so generated secrets would change on every render
+#     and restart Harbor on every sync. Reasoning in bootstrap/harbor.sh.
+#   - the database is the shared RDS instead of a Postgres pod. The original
+#     injected the pod's password with `helm --set-file`, which Argo CD has no
+#     equivalent for; RDS takes it from a Secret, and adds backups. Harbor's
+#     load (projects, tags, scan results) is small at this platform's size.
+#   - the bucket is this account's.
+#
+# Second source: the Ingress (workloads/harbor), because the chart's own
+# ingress would split traffic across two backends with one health check.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: harbor
+  namespace: argocd
+  annotations:
+    # After Trino (10). Must be up before Spark (next), whose image lives here.
+    argocd.argoproj.io/sync-wave: "20"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://github.com/nopega/vpn-data-platform-apps.git
+      targetRevision: main
+      path: charts/harbor
+      helm:
+        releaseName: harbor
+        valueFiles:
+          - values.yaml
+        valuesObject:
+          externalURL: https://harbor.nopega.net
+
+          # chart creates Service "harbor" (its nginx), port 80; the Ingress
+          # in workloads/harbor points at it. TLS ends at the ALB.
+          expose:
+            type: clusterIP
+            tls:
+              enabled: false
+
+          persistence:
+            imageChartStorage:
+              type: s3
+              s3:
+                existingSecret: harbor-registry-s3
+                region: ap-southeast-1
+                bucket: vpn-data-platform-registry-126052242139
+
+          database:
+            type: external
+            external:
+              host: vpn-data-platform-db.cf00qk0geine.ap-southeast-1.rds.amazonaws.com
+              port: "5432"
+              username: harbor
+              coreDatabase: registry
+              existingSecret: harbor-database
+              sslmode: require
+
+          # --- pinned secrets (bootstrap/harbor.sh) ---
+          existingSecretAdminPassword: harbor-admin-password
+          existingSecretAdminPasswordKey: HARBOR_ADMIN_PASSWORD
+          existingSecretSecretKey: harbor-secret-key
+          core:
+            existingSecret: harbor-core-secret
+            secretName: harbor-token-cert
+            existingXsrfSecret: harbor-xsrf
+            existingXsrfSecretKey: CSRF_KEY
+          jobservice:
+            existingSecret: harbor-jobservice-secret
+            existingSecretKey: JOBSERVICE_SECRET
+          registry:
+            existingSecret: harbor-registry-http
+            existingSecretKey: REGISTRY_HTTP_SECRET
+            credentials:
+              existingSecret: harbor-registry-credentials
+
+          # Metrics for Prometheus: off for now, as in the original.
+          metrics:
+            enabled: false
+    - repoURL: https://github.com/nopega/vpn-data-platform-apps.git
+      targetRevision: main
+      path: workloads/harbor
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: harbor
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
