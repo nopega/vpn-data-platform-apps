@@ -1,0 +1,57 @@
+# SparkApplication submitted by dags/spark_smoke_test.py. Same job as
+# runs/smoke-test.yaml; the operator adds a random suffix to the name so
+# runs do not collide.
+---
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: spark-smoke-test
+  namespace: spark
+spec:
+  type: Python
+  pythonVersion: '3'
+  mode: cluster
+  image: harbor.nopega.net/ice-berg-platform/datapipeline:0.1.0
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets:
+  - harbor-pull
+  mainApplicationFile: local:///opt/spark/jobs/smoke_test.py
+  sparkVersion: 4.0.1
+  restartPolicy:
+    type: Never
+  timeToLiveSeconds: 3600
+  sparkConf:
+    spark.eventLog.enabled: 'true'
+    spark.eventLog.dir: s3a://vpn-data-platform-logs-126052242139/spark-events/
+    spark.hadoop.fs.s3a.aws.credentials.provider: software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider
+    spark.hadoop.fs.s3a.endpoint.region: ap-southeast-1
+  driver:
+    cores: 1
+    memory: 1g
+    serviceAccount: spark
+    nodeSelector:
+      workload: critical
+    env:
+    - name: POLARIS_URI
+      value: http://polaris.polaris.svc.cluster.local:8181/api/catalog
+    envFrom:
+    - secretRef:
+        name: spark-polaris-credentials
+  executor:
+    instances: 2
+    cores: 1
+    memory: 1g
+    serviceAccount: spark
+    nodeSelector:
+      workload: batch
+    tolerations:
+    - key: spot
+      operator: Equal
+      value: 'true'
+      effect: NoSchedule
+    env:
+    - name: POLARIS_URI
+      value: http://polaris.polaris.svc.cluster.local:8181/api/catalog
+    envFrom:
+    - secretRef:
+        name: spark-polaris-credentials

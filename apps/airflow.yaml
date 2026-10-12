@@ -1,0 +1,80 @@
+# Airflow 3.2.2 (chart 1.22.0) -- KubernetesExecutor, DAGs from git.
+#
+# Kept in next/ until VPN_DATA_PLATFORM terraform/10_airflow is applied,
+# bootstrap/airflow.sh has run, and the old 'airflow' record is gone from
+# Cloudflare. Then: mv next/airflow.yaml apps/ and push. After the api-server
+# is Running: bootstrap/airflow.sh admin.
+#
+# Chart and values.yaml are the original platform's, vendored unchanged in
+# charts/airflow ("data-platform)" marks each deviation from upstream there).
+# Overridden below:
+#   - task logs go to this account's logs bucket
+#   - DAGs come from THIS repository's dags/ folder (the original synced a
+#     separate repository, nopega/airflow_dag, written for the old platform's
+#     buckets, service names and IRSA -- see dags/README.md)
+#   - SMTP connection off: its Secret (airflow-smtp) does not exist here, and
+#     a missing Secret stops every Airflow pod, not just email
+#   - the database migration Job runs as an Argo CD Sync hook. As a plain
+#     resource, its 5-minute TTL would delete it, Argo CD would see it missing
+#     and re-create it -- a migration every five minutes, forever OutOfSync.
+#
+# Checked for the monitoring trap: no Helm hooks rendered (migration and
+# create-user hooks are off), no generated secrets (all four are named and made
+# by bootstrap/airflow.sh).
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: airflow
+  namespace: argocd
+  annotations:
+    # Last: a DAG that runs the moment Airflow starts should find Polaris,
+    # Trino, Harbor and the Spark operator already there.
+    argocd.argoproj.io/sync-wave: "40"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://github.com/nopega/vpn-data-platform-apps.git
+      targetRevision: main
+      path: charts/airflow
+      helm:
+        releaseName: airflow
+        valueFiles:
+          - values.yaml
+        valuesObject:
+          secret: []
+
+          config:
+            logging:
+              remote_base_log_folder: s3://vpn-data-platform-logs-126052242139/airflow
+
+          dags:
+            gitSync:
+              repo: https://github.com/nopega/vpn-data-platform-apps.git
+              branch: main
+              rev: HEAD
+              ref: main
+              subPath: dags
+
+          migrateDatabaseJob:
+            useHelmHooks: false
+            # Kept a day so Argo CD always sees it finish; replaced on the
+            # next sync (BeforeHookCreation).
+            ttlSecondsAfterFinished: 86400
+            jobAnnotations:
+              argocd.argoproj.io/hook: Sync
+              argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    - repoURL: https://github.com/nopega/vpn-data-platform-apps.git
+      targetRevision: main
+      path: workloads/airflow
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: airflow
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

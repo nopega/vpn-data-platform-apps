@@ -1,0 +1,34 @@
+# airflow.nopega.net on the shared internal ALB -> the API server (UI + REST).
+# The api-server runs with --proxy-headers (values.yaml), so it trusts the
+# ALB's X-Forwarded-Proto and builds https:// redirects.
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: airflow
+  namespace: airflow
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internal
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/group.name: vpn-data-platform-internal
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-2021-06
+    alb.ingress.kubernetes.io/inbound-cidrs: 10.42.0.0/16
+    alb.ingress.kubernetes.io/healthcheck-path: /api/v2/monitor/health
+spec:
+  ingressClassName: alb
+  tls:
+    - hosts:
+        - airflow.nopega.net
+      secretName: airflow-tls-unused
+  rules:
+    - host: airflow.nopega.net
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: airflow-api-server
+                port:
+                  number: 8080

@@ -1,0 +1,32 @@
+# Prometheus scrapes Airflow's metrics from the chart's statsd-exporter
+# (Airflow speaks only StatsD; the exporter translates). The chart ships no
+# ServiceMonitor, so it lives here. From the original platform, unchanged.
+#
+# In namespace monitoring, selecting a Service in namespace airflow -- hence
+# the explicit namespaceSelector. `release: airflow` is the Helm release name
+# in apps/airflow.yaml; rename one, rename both.
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: airflow-statsd
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: airflow
+    app.kubernetes.io/component: statsd
+spec:
+  namespaceSelector:
+    matchNames:
+      - airflow
+  selector:
+    matchLabels:
+      tier: airflow
+      component: statsd
+      release: airflow
+  endpoints:
+    # By port NAME: the Service also has 9125/UDP (StatsD in), which never
+    # answers an HTTP scrape.
+    - port: statsd-scrape
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s

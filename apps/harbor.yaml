@@ -68,6 +68,11 @@ spec:
               coreDatabase: registry
               existingSecret: harbor-database
               sslmode: require
+            # The chart's defaults (900 open, 100 idle) were sized for a
+            # database of Harbor's own. This one is a db.t4g.micro (about 110
+            # connections) shared with Polaris and Airflow.
+            maxOpenConns: 30
+            maxIdleConns: 5
 
           # --- pinned secrets (bootstrap/harbor.sh) ---
           existingSecretAdminPassword: harbor-admin-password

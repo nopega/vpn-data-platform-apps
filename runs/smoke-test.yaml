@@ -36,8 +36,11 @@ spec:
     spark.eventLog.dir: "s3a://vpn-data-platform-logs-126052242139/spark-events/"
     # Pod Identity hands credentials over an HTTP endpoint in the pod
     # (AWS_CONTAINER_CREDENTIALS_FULL_URI), not the IRSA token file the
-    # original named here.
-    spark.hadoop.fs.s3a.aws.credentials.provider: "software.amazon.awssdk.auth.credentials.ContainerCredentialsProvider"
+    # original named here. DefaultCredentialsProvider, not
+    # ContainerCredentialsProvider: S3A builds the provider through a public
+    # constructor or a static create(), and only the default chain (which
+    # includes the container endpoint) has one.
+    spark.hadoop.fs.s3a.aws.credentials.provider: "software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider"
     spark.hadoop.fs.s3a.endpoint.region: "ap-southeast-1"
   driver:
     cores: 1
