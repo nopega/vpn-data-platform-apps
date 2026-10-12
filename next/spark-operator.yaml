@@ -1,0 +1,64 @@
+# Kubeflow Spark Operator 2.5.0 -- turns a SparkApplication into driver and
+# executor pods.
+#
+# Kept in next/ until VPN_DATA_PLATFORM terraform/09_spark is applied and
+# bootstrap/spark.sh has run. Then: mv next/spark-operator.yaml apps/ and push.
+#
+# Two sources:
+#   charts/spark-operator   the original platform's vendored chart and
+#                           values.yaml, unchanged ("data-platform)" marks
+#                           every deviation from upstream there)
+#   workloads/spark         namespace spark, ServiceAccount spark, RBAC
+#
+# Checked for the two things that broke monitoring under Argo CD:
+#   - Helm hook Jobs: the CRD-upgrade hook is off (hook.upgradeCrd: false);
+#     Argo CD applies crds/ itself.
+#   - generated secrets: none rendered. The webhook makes its own certificate
+#     at runtime and patches caBundle into the webhook configurations, so
+#     caBundle is ignored below -- otherwise self-heal would erase it.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: spark-operator
+  namespace: argocd
+  annotations:
+    # After Harbor (20): jobs pull their image from it.
+    argocd.argoproj.io/sync-wave: "30"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://github.com/nopega/vpn-data-platform-apps.git
+      targetRevision: main
+      path: charts/spark-operator
+      helm:
+        releaseName: spark-operator
+        valueFiles:
+          - values.yaml
+    - repoURL: https://github.com/nopega/vpn-data-platform-apps.git
+      targetRevision: main
+      path: workloads/spark
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: spark-operator
+  ignoreDifferences:
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      jqPathExpressions:
+        - .webhooks[]?.clientConfig.caBundle
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      jqPathExpressions:
+        - .webhooks[]?.clientConfig.caBundle
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # The SparkApplication CRD is larger than the 256 KB annotation
+      # client-side apply keeps on each object.
+      - ServerSideApply=true
+      - RespectIgnoreDifferences=true

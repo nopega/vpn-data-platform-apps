@@ -1,0 +1,96 @@
+# Namespace spark: where SparkApplications run, and the permissions their
+# pods need. Same model as the original platform (namespace-and-rbac.yaml).
+#
+# ServiceAccount spark has no annotation: its AWS role is attached by an EKS
+# Pod Identity association (VPN_DATA_PLATFORM terraform/09_spark), keyed on
+# namespace + name. The two Secrets the jobs use (harbor-pull,
+# spark-polaris-credentials) are made by bootstrap/spark.sh, not here.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: spark
+  labels:
+    data-platform/purpose: spark-jobs
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: spark
+  namespace: spark
+---
+# What a driver does: create its executors, a Service for them to call back
+# on, ConfigMaps for its conf, and clean all of it up.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: spark-driver
+  namespace: spark
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "create", "delete", "deletecollection"]
+  - apiGroups: [""]
+    resources: ["pods/log", "pods/status"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "create", "delete", "deletecollection"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete", "deletecollection"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "create", "delete", "deletecollection"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: spark-driver
+  namespace: spark
+subjects:
+  - kind: ServiceAccount
+    name: spark
+    namespace: spark
+roleRef:
+  kind: Role
+  name: spark-driver
+  apiGroup: rbac.authorization.k8s.io
+---
+# Airflow submits SparkApplications and follows them. Bound to Airflow's
+# ServiceAccounts ahead of time; the binding is inert until Airflow exists.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: airflow-spark-submitter
+  namespace: spark
+rules:
+  - apiGroups: ["sparkoperator.k8s.io"]
+    resources: ["sparkapplications", "sparkapplications/status"]
+    verbs: ["get", "list", "watch", "create", "delete", "patch", "update"]
+  - apiGroups: ["sparkoperator.k8s.io"]
+    resources: ["scheduledsparkapplications", "scheduledsparkapplications/status"]
+    verbs: ["get", "list", "watch", "create", "delete", "patch", "update"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch", "patch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: airflow-spark-submitter
+  namespace: spark
+subjects:
+  - kind: ServiceAccount
+    name: airflow-worker
+    namespace: airflow
+  - kind: ServiceAccount
+    name: airflow-scheduler
+    namespace: airflow
+roleRef:
+  kind: Role
+  name: airflow-spark-submitter
+  apiGroup: rbac.authorization.k8s.io

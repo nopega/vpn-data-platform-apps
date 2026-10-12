@@ -1,0 +1,71 @@
+# A one-off run, not managed by Argo CD (runs/ is not under apps/): apply it,
+# watch it, delete it. Re-apply after deleting to run again.
+#
+#   kubectl apply -f runs/smoke-test.yaml
+#   kubectl -n spark get sparkapplication platform-smoke-test -w
+#   kubectl -n spark logs platform-smoke-test-driver | grep -A2 -E "^\[|SMOKE"
+#   kubectl delete -f runs/smoke-test.yaml
+#
+# What it touches:
+#   image        Harbor, pulled with Secret harbor-pull (bootstrap/spark.sh)
+#   driver       on-demand (workload=critical)
+#   executors    Spot via Karpenter's spot-batch NodePool (workload=batch)
+#   catalog      Polaris as principal etl (Secret spark-polaris-credentials)
+#   event log    s3a://<logs>/spark-events/ with the pod's own role (terraform/09)
+---
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: platform-smoke-test
+  namespace: spark
+spec:
+  type: Python
+  pythonVersion: "3"
+  mode: cluster
+  image: harbor.nopega.net/ice-berg-platform/datapipeline:0.1.0
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets:
+    - harbor-pull
+  mainApplicationFile: local:///opt/spark/jobs/smoke_test.py
+  sparkVersion: "4.0.1"
+  restartPolicy:
+    type: Never
+  timeToLiveSeconds: 3600
+  sparkConf:
+    spark.eventLog.enabled: "true"
+    spark.eventLog.dir: "s3a://vpn-data-platform-logs-126052242139/spark-events/"
+    # Pod Identity hands credentials over an HTTP endpoint in the pod
+    # (AWS_CONTAINER_CREDENTIALS_FULL_URI), not the IRSA token file the
+    # original named here.
+    spark.hadoop.fs.s3a.aws.credentials.provider: "software.amazon.awssdk.auth.credentials.ContainerCredentialsProvider"
+    spark.hadoop.fs.s3a.endpoint.region: "ap-southeast-1"
+  driver:
+    cores: 1
+    memory: 1g
+    serviceAccount: spark
+    nodeSelector:
+      workload: critical
+    env:
+      - name: POLARIS_URI
+        value: "http://polaris.polaris.svc.cluster.local:8181/api/catalog"
+    envFrom:
+      - secretRef:
+          name: spark-polaris-credentials
+  executor:
+    instances: 2
+    cores: 1
+    memory: 1g
+    serviceAccount: spark
+    nodeSelector:
+      workload: batch
+    tolerations:
+      - key: spot
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
+    env:
+      - name: POLARIS_URI
+        value: "http://polaris.polaris.svc.cluster.local:8181/api/catalog"
+    envFrom:
+      - secretRef:
+          name: spark-polaris-credentials
