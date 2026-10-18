@@ -22,7 +22,7 @@ spec:
   type: Python
   pythonVersion: "3"
   mode: cluster
-  image: harbor.nopega.net/ice-berg-platform/datapipeline:0.1.0
+  image: harbor.nopega.net/ice-berg-platform/datapipeline:0.2.0
   imagePullPolicy: IfNotPresent
   imagePullSecrets:
     - harbor-pull

@@ -152,7 +152,7 @@ with DAG(
         # The image supplies the runtime; the repo below supplies the logic.
         # Both are parameters so a run can be pinned to either.
         "image_tag": Param(
-            "0.1.0",
+            "0.2.0",
             type="string",
             pattern=r"^[A-Za-z0-9._-]+$",
             description="a tag in harbor.nopega.net/ice-berg-platform/datapipeline",

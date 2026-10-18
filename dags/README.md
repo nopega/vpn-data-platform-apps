@@ -16,7 +16,7 @@ New DAGs start paused. Trigger the smoke tests by hand; unpause
 ## nyc_taxi_medallion
 
 Ported from `nopega/airflow_dag`. The DAG file is unchanged except the
-default `image_tag` (`0.1.0`, the image `images/spark/build.sh` pushes). The
+default `image_tag` (`0.2.0`, built and pushed by CI from tag `spark-v0.2.0`). The
 three templates in `spark/` were changed only where the platform differs
 (marked at the top of each file):
 
