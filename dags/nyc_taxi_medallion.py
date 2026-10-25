@@ -143,9 +143,13 @@ with DAG(
         #
         # which names neither the parameter nor the URL. A pattern rejects the
         # value at trigger time instead, while the message can still be useful.
+        # Nullable, not "": Airflow 3's trigger form marks a plain string
+        # param as required and will not submit it blank -- which made
+        # Backfill (one blank date, many runs) impossible. null is what the
+        # form sends for an empty field; resolve_date treats it like "".
         "date": Param(
-            "",
-            type="string",
+            None,
+            type=["null", "string"],
             pattern=r"^$|^\d{4}-\d{2}-\d{2}$",
             description="YYYY-MM-DD, or blank to derive from the run",
         ),
