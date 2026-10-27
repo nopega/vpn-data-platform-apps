@@ -57,9 +57,12 @@ spec:
 
   executor:
     # Small data (hundreds to a few thousand events a day): one executor.
+    # 2g like the taxi templates: at 1g, silver's executors died with exit
+    # code 50 while reading the changelog (Iceberg's vectorized Parquet reader
+    # allocates Arrow buffers off-heap on top of the JVM heap).
     instances: 1
     cores: 1
-    memory: 1g
+    memory: 2g
     serviceAccount: spark
     nodeSelector:
       workload: batch
