@@ -41,9 +41,17 @@ spec:
     spark.hadoop.fs.s3a.endpoint.region: "ap-southeast-1"
     spark.sql.catalog.data_platform.header.X-Iceberg-Access-Delegation: "vended-credentials"
     spark.sql.catalog.data_platform.client.region: "ap-southeast-1"
-    # DEBUG: keep executor pods after they exit so `kubectl logs` can read why.
-    # Remove once the exit-code-50 failure is understood.
-    spark.kubernetes.executor.deleteOnTermination: "false"
+    # WORKAROUND (image AWS SDK mismatch). The image carries two AWS SDK v2
+    # copies: bundle-2.24.6.jar (for hadoop-aws) and the newer one inside
+    # iceberg-aws-bundle-1.11.0.jar. The old one wins on the classpath, and
+    # Iceberg's VendedCredentialsProvider.close() calls
+    # IoUtils.closeQuietlyV2(), which 2.24.6 does not have. When Spark's
+    # ContextCleaner frees a broadcast table mid-job, that close() runs in a
+    # background thread, throws NoSuchMethodError, and the executor exits
+    # with code 50. Turning reference tracking off means broadcasts are only
+    # released at shutdown. Remove once the image ships one AWS SDK version
+    # (BACKLOG: "Spark image: single AWS SDK").
+    spark.cleaner.referenceTracking: "false"
 
   driver:
     cores: 1
@@ -60,12 +68,9 @@ spec:
 
   executor:
     # Small data (hundreds to a few thousand events a day): one executor.
-    # 2g like the taxi templates: at 1g, silver's executors died with exit
-    # code 50 while reading the changelog (Iceberg's vectorized Parquet reader
-    # allocates Arrow buffers off-heap on top of the JVM heap).
     instances: 1
     cores: 1
-    memory: 2g
+    memory: 1g
     serviceAccount: spark
     nodeSelector:
       workload: batch
