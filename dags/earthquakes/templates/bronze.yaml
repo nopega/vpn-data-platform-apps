@@ -1,4 +1,4 @@
-# earthquakes bronze: governance check, then incremental CDC pull from USGS into the changelog
+# earthquakes bronze: access check, then incremental CDC pull from USGS into the changelog
 #
 # Same shape as the taxi templates, with two deliberate differences:
 #   - credentials come from Secret polaris-pl-earthquakes (Polaris principal

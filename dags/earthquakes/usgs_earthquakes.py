@@ -15,7 +15,7 @@ WHAT THIS PIPELINE DEMONSTRATES
                           gold by event_date (Iceberg hidden partitioning)
 - least privilege         every task runs as Polaris principal pl_earthquakes,
                           which can touch only the three earthquakes namespaces;
-                          bronze starts by PROVING it cannot read the taxi table
+                          each job starts by checking it can reach the tables it uses
 - recovery                watermark only advances on a committed write; MERGEs
                           are keyed, so any task can be re-run; `since` re-reads
                           from any point in time
@@ -80,7 +80,7 @@ with DAG(
     bronze = SparkKubernetesOperator(
         task_id="bronze_cdc",
         application_file="templates/bronze.yaml",
-        doc_md="Governance check, then pull every event USGS changed since the watermark into the changelog.",
+        doc_md="Access check, then pull every event USGS changed since the watermark into the changelog.",
         **common,
     )
     silver = SparkKubernetesOperator(
