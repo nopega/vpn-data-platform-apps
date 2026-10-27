@@ -34,13 +34,14 @@ certificate; the hostnames resolve only on the tailnet.
 
 ![Data flow — from source to dashboard](docs/data-flow.png)
 
-`dags/` holds three DAGs:
+`dags/` holds four DAGs, one folder per pipeline:
 
 | DAG | What it proves |
 |---|---|
 | `platform_smoke_test` | git-sync, the scheduler, task pods and S3 task logs all work |
 | `spark_smoke_test` | Airflow submits a SparkApplication and follows it to completion |
 | `nyc_taxi_medallion` | a full medallion pipeline on public trip data: **bronze → silver → gold**, one partition per run, daily |
+| `usgs_earthquakes` | incremental **CDC** from a public API, **SCD Type 2 + Type 1**, and a Polaris principal that can touch only its own tables |
 
 What makes the pipeline safe to run and re-run:
 
@@ -97,7 +98,7 @@ next/        staging for Applications not enabled yet (empty now; root does not 
 charts/      vendored Helm charts: polaris, trino, harbor, spark-operator, airflow
 values/      values for charts pulled from upstream (kube-prometheus-stack)
 workloads/   plain manifests: Ingresses, NodePools, RBAC, StorageClass, ServiceMonitors
-dags/        Airflow DAGs and their SparkApplication templates (git-synced)
+dags/        Airflow DAGs, one folder per pipeline, each with its templates/ (git-synced)
 images/      the Spark job image (Dockerfile, build script, smoke-test job)
 runs/        one-off SparkApplications to apply by hand
 .github/     the image build workflow, run on the in-cluster runners

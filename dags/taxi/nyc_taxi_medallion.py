@@ -9,7 +9,7 @@ be queried afterwards.
 HOW A TASK BECOMES A SPARK JOB
 --------------------------------
     SparkKubernetesOperator (this file, in an Airflow worker pod)
-        creates a SparkApplication object from spark/<stage>.yaml
+        creates a SparkApplication object from templates/<stage>.yaml
             the Spark Operator sees the object and creates a driver pod
                 the driver downloads its job from github over https
                     the driver requests executors, which land on Spot
@@ -221,21 +221,21 @@ with DAG(
 
     bronze = SparkKubernetesOperator(
         task_id="bronze_ingest",
-        application_file="spark/bronze_ingest.yaml",
+        application_file="templates/bronze_ingest.yaml",
         doc_md="Download the month's published Parquet, keep this day, land it unchanged.",
         **common,
     )
 
     silver = SparkKubernetesOperator(
         task_id="silver_clean",
-        application_file="spark/silver_clean.yaml",
+        application_file="templates/silver_clean.yaml",
         doc_md="Apply and COUNT every quality rule, de-duplicate, derive per-trip measures.",
         **common,
     )
 
     gold = SparkKubernetesOperator(
         task_id="gold_aggregate",
-        application_file="spark/gold_aggregate.yaml",
+        application_file="templates/gold_aggregate.yaml",
         doc_md="Aggregate to zone x payment method, pre-joined and pre-computed for Power BI.",
         **common,
     )

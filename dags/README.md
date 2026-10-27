@@ -4,11 +4,25 @@ Airflow's DAG folder: git-sync clones this repository and points Airflow at
 this directory (`apps/airflow.yaml`, `dags.gitSync.subPath: dags`). A push to
 `main` reaches the scheduler within about a minute; nothing is deployed.
 
+One folder per pipeline. Each DAG's SparkApplication templates sit next to it
+in `templates/`: Airflow resolves `application_file` relative to the DAG
+file's own folder, so `templates/bronze.yaml` means *this pipeline's* bronze.
+
+```
+dags/
+  taxi/          nyc_taxi_medallion.py + templates/{bronze_ingest,silver_clean,gold_aggregate}.yaml
+  earthquakes/   usgs_earthquakes.py   + templates/{bronze,silver,gold}.yaml
+  smoke_tests/   platform_smoke_test.py, spark_smoke_test.py + templates/smoke_test.yaml
+```
+
+A new pipeline is a new folder.
+
 | DAG | What it does |
 |---|---|
 | `platform_smoke_test` | proves git-sync, scheduler, KubernetesExecutor task pods, S3 task logs |
 | `spark_smoke_test` | Airflow submits a SparkApplication and follows it to the end |
 | `nyc_taxi_medallion` | the real pipeline: bronze → silver → gold, one day of NYC yellow taxi trips, daily at 10:00 Bangkok time |
+| `usgs_earthquakes` | incremental query-based CDC from the USGS API → SCD Type 2 (`event_history`) + SCD Type 1 (`event_current`) → daily summary; runs as Polaris principal `pl_earthquakes`, which can touch only the `*.earthquakes` namespaces. Daily at 10:30 Bangkok time |
 
 New DAGs start paused. Trigger the smoke tests by hand; unpause
 `nyc_taxi_medallion` only when you want the daily schedule.
@@ -17,7 +31,7 @@ New DAGs start paused. Trigger the smoke tests by hand; unpause
 
 Ported from `nopega/airflow_dag`. The DAG file is unchanged except the
 default `image_tag` (`0.2.0`, built and pushed by CI from tag `spark-v0.2.0`). The
-three templates in `spark/` were changed only where the platform differs
+three templates in `taxi/templates/` were changed only where the platform differs
 (marked at the top of each file):
 
 | | old platform | here |

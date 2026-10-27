@@ -33,7 +33,7 @@ with DAG(
     SparkKubernetesOperator(
         task_id="spark_smoke_test",
         namespace="spark",
-        application_file="spark/smoke_test.yaml",
+        application_file="templates/smoke_test.yaml",
         # Stream the driver's [1/5]... lines into this task's log.
         get_logs=True,
         # On failure, show the pod's Kubernetes events (ImagePullBackOff,

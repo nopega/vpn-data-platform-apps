@@ -1,0 +1,81 @@
+# earthquakes bronze: governance check, then incremental CDC pull from USGS into the changelog
+#
+# Same shape as the taxi templates, with two deliberate differences:
+#   - credentials come from Secret polaris-pl-earthquakes (Polaris principal
+#     pl_earthquakes), which can touch ONLY the earthquakes namespaces. The
+#     shared spark-polaris-credentials (principal etl) is not mounted.
+#   - the name uses the run's timestamp, not a processing date: this pipeline
+#     is watermark-driven, so a run is identified by when it ran.
+#
+# Code: pipelines/earthquakes/ in {{ params.pipeline_repo }} at {{ params.pipeline_ref }}.
+# common.py is listed in deps.pyFiles because every job imports it.
+---
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: eq-bronze-{{ ts_nodash | lower }}
+  namespace: spark
+spec:
+  type: Python
+  pythonVersion: "3"
+  mode: cluster
+  image: harbor.nopega.net/ice-berg-platform/datapipeline:{{ params.image_tag }}
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets:
+    - harbor-pull
+
+  mainApplicationFile: "https://raw.githubusercontent.com/{{ params.pipeline_repo }}/{{ params.pipeline_ref }}/pipelines/earthquakes/bronze_ingest.py"
+  deps:
+    pyFiles:
+      - "https://raw.githubusercontent.com/{{ params.pipeline_repo }}/{{ params.pipeline_ref }}/pipelines/earthquakes/common.py"
+
+  # Empty unless a run overrides it; the job then reads from its own watermark.
+  arguments:
+    - "--since"
+    - "{{ params.since or '' }}"
+
+  sparkVersion: "4.0.1"
+  restartPolicy:
+    type: Never
+  timeToLiveSeconds: 3600
+
+  sparkConf:
+    spark.eventLog.enabled: "true"
+    spark.eventLog.dir: "s3a://vpn-data-platform-logs-126052242139/spark-events/"
+    spark.hadoop.fs.s3a.aws.credentials.provider: "software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider"
+    spark.hadoop.fs.s3a.endpoint.region: "ap-southeast-1"
+    spark.sql.catalog.data_platform.header.X-Iceberg-Access-Delegation: "vended-credentials"
+    spark.sql.catalog.data_platform.client.region: "ap-southeast-1"
+
+  driver:
+    cores: 1
+    memory: 1g
+    serviceAccount: spark
+    nodeSelector:
+      workload: critical
+    env:
+      - name: POLARIS_URI
+        value: "http://polaris.polaris.svc.cluster.local:8181/api/catalog"
+    envFrom:
+      - secretRef:
+          name: polaris-pl-earthquakes
+
+  executor:
+    # Small data (hundreds to a few thousand events a day): one executor.
+    instances: 1
+    cores: 1
+    memory: 1g
+    serviceAccount: spark
+    nodeSelector:
+      workload: batch
+    tolerations:
+      - key: "spot"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+    env:
+      - name: POLARIS_URI
+        value: "http://polaris.polaris.svc.cluster.local:8181/api/catalog"
+    envFrom:
+      - secretRef:
+          name: polaris-pl-earthquakes
