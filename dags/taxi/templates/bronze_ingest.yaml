@@ -95,7 +95,7 @@ spec:
         value: "vpn-data-platform-warehouse-126052242139"
     envFrom:
       - secretRef:
-          name: spark-polaris-credentials
+          name: polaris-pl-taxi
 
   executor:
     # The executors never import the pipeline code: these jobs use only
@@ -120,4 +120,4 @@ spec:
         value: "vpn-data-platform-warehouse-126052242139"
     envFrom:
       - secretRef:
-          name: spark-polaris-credentials
+          name: polaris-pl-taxi

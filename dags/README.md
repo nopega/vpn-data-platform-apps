@@ -46,9 +46,11 @@ The PySpark code is NOT here. Each run's driver downloads it from
 `github.com/nopega/ice-berg-data-pipeline` (`pipeline_repo` / `pipeline_ref`
 params), unchanged.
 
-Before the first run, the Polaris namespaces the jobs write into must exist:
-`bronze.transactional`, `silver.derived`, `gold.aggregate`.
-`bootstrap/spark.sh` (VPN_DATA_PLATFORM) creates them.
+Tables live in the domain namespaces `bronze.transactional.taxi`,
+`silver.derived.taxi`, `gold.aggregate.taxi`, and every task runs as Polaris
+principal `pl_taxi` (Secret `spark/polaris-pl-taxi`), which can touch only
+those three. Before the first run:
+`VPN_DATA_PLATFORM/bootstrap/pipeline_principal.sh taxi`.
 
 Failure email (`send_smtp_notification`) has no `smtp_default` connection
 yet, so a failed run logs a notifier error instead of sending mail. BACKLOG:

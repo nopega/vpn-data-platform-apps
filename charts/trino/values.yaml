@@ -239,7 +239,7 @@ server:
 # Password authentication answers "who are you". It says nothing about what you
 # may touch. Until this block existed, `team_b_powerbi` -- a credential that is
 # by design handed to a BI tool on someone's laptop -- could
-# `SELECT * FROM data_platform."bronze.transactional".taxi_trip` and read every
+# `SELECT * FROM data_platform."bronze.transactional.taxi".taxi_trip` and read every
 # raw record the platform has ever landed, and could DROP any table in it.
 #
 # WHY THE BI ACCOUNT IS RESTRICTED TO GOLD
@@ -292,7 +292,7 @@ server:
 # Known limitation, worth stating rather than discovering later: Trino does not
 # apply the table rules above when filtering `system.jdbc.tables`
 # (trinodb/trino#20864). The BI account can therefore see that
-# `bronze.transactional.taxi_trip` EXISTS. It cannot read a row of it. If
+# `bronze.transactional.taxi.taxi_trip` EXISTS. It cannot read a row of it. If
 # hiding the names matters, the fix is a catalog per medallion layer, since
 # catalog rules are enforced there.
 #
